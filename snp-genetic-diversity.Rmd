@@ -1,0 +1,606 @@
+---
+title: "SNP genetic diversity"
+output: html_notebook
+---
+
+```{r message=FALSE}
+library(adegenet)
+library(hierfstat)
+library(genepop)
+
+library(readxl)
+library(tidyverse)
+library(graph4lg)
+library(ggplot2)
+library(gridExtra)
+
+library(outliers)
+library(MuMIn)
+library(car)
+library(rstatix)
+library(FSA)
+```
+
+# import snp data
+```{r eval=FALSE}
+snp <- read.genepop("../Data/snp.gen", ncode = 3)  # adegenet package
+snp
+```
+
+-   pouplations
+```{r}
+pop <- strsplit(rownames(snp@tab), split = "_") %>% sapply(function(x) x[1])
+snp@pop <- as.factor(pop)   # population names
+snp
+```
+
+- sample size
+```{r}
+summary(snp$pop)
+```
+
+## create hierfstat object
+```{r eval=FALSE} 
+fstat <- genind2hierfstat(snp)
+fstat[1:5,1:5]
+```
+
+# calculate genetic diversity
+```{r eval=FALSE}
+div <- basic.stats(fstat, diploid = TRUE, digits = 3)
+summary(div)
+```
+
+## Expected Heterozygosity (Hs)
+```{r}
+hs <- apply(div$Hs, MARGIN = 2, FUN = mean, na.rm = TRUE)
+hs
+```
+
+## Observed Heterozygosity (Ho)
+```{r}
+ho <- apply(div$Ho, MARGIN = 2, FUN = mean, na.rm = TRUE)
+ho
+```
+
+## Allelic richness (Ar)
+```{r eval=FALSE}
+ArRic <- allelic.richness(fstat)
+```
+
+-   mean allelic richness per population
+
+```{r}
+Ar <- ArRic$Ar %>% apply(MARGIN = 2, FUN = mean, na.rm = TRUE)
+Ar
+```
+
+- combined
+```{r}
+div.df <- data.frame(He = hs, Ho = ho, Ar = Ar) %>% rownames_to_column(var = "pop")
+div.df
+```
+
+# sampling sites
+```{r}
+site <- read.csv("../Data/sites.csv", header = TRUE, sep = ",")
+site
+```
+
+## combine genetic diversity & sampling sites
+-   merge site and genetic diversity data
+
+```{r}
+div.df <- merge(site, div.df, by = "pop")
+```
+
+
+# Genetic diversity ~ PC1
+- Normality
+```{r}
+shapiro.test(div.df$He)
+shapiro.test(div.df$Ho)
+shapiro.test(div.df$Ar)
+```
+
+- outliers
+```{r}
+outlier(div.df$He)
+outlier(div.df$Ho)
+outlier(div.df$Ar)
+```
+
+## He ~ PC1
+### linear model (landscape)
+```{r}
+he.lands.fit <- lm(He ~ pc1_lands, data = div.df)
+summary(he.lands.fit)
+```
+
+-   Diagnostics
+```{r}
+plot(he.lands.fit)
+```
+
+- normality & homoscendasticity
+```{r}
+# shapiro-wilk
+residuals(he.lands.fit) %>% shapiro.test()
+
+# Bartlett
+ncvTest(he.lands.fit)
+
+# Cook's distance
+cooks.distance(he.lands.fit) %>% plot()
+which(cooks.distance(he.lands.fit) > 4/length(div.df$pop))
+```
+
+### EXPORT-- plot (landscape)
+```{r}
+p1.He <- 
+ggplot(div.df, aes(x = pc1_lands , y = He)) + geom_point(size = 5) +
+       geom_smooth(method = "lm", formula = y ~ x, color = "cornflowerblue", se = TRUE) + 
+       #annotate("text", x = 2, y = 0.13, label = "p = 0.08", hjust = 0, size = 8) +
+       #annotate("text", x = 2, y = 0.13, label = "italic(R[adj])^2 == 0.13",
+       #         parse = TRUE, hjust = 0, vjust = 1.5, size = 8) +
+       theme_classic() +
+       xlab("PC1") + ylab(expression(Expected~heterozygosity~(H[E]))) + ggtitle("(A)") +
+       theme(axis.text = element_text(size = 20), axis.title = element_text(size = 20), 
+             plot.title = element_text(size = 25, face = "bold"))
+
+print(p1.He)
+```
+
+### linear model (local)
+```{r}
+he.local.fit <- lm(He ~ pc1_local, data = div.df)
+summary(he.local.fit)
+```
+
+-   Diagnostics
+```{r}
+plot(he.local.fit)
+```
+
+- normality & homoscendasticity
+```{r}
+# shapiro-wilk
+residuals(he.local.fit) %>% shapiro.test()
+
+# Bartlett
+ncvTest(he.local.fit)
+
+# Cook's distance
+cooks.distance(he.local.fit) %>% plot()
+which(cooks.distance(he.local.fit) > 4/length(div.df$pop))
+```
+
+### EXPORT-- plot (local)
+```{r}
+p2.He <- 
+ggplot(div.df, aes(x = pc1_local , y = He)) + geom_point(size = 5) +
+       geom_smooth(method = "lm", formula = y ~ x, color = "cornflowerblue", se = TRUE) + 
+       #annotate("text", x = 2, y = 0.13, label = "p = 0.08", hjust = 0, size = 8) +
+       #annotate("text", x = 2, y = 0.13, label = "italic(R[adj])^2 == 0.13",
+       #         parse = TRUE, hjust = 0, vjust = 1.5, size = 8) +
+       theme_classic() +
+       xlab("PC1") + ylab(expression(Expected~heterozygosity~(H[E]))) + ggtitle("(A)") +
+       theme(axis.text = element_text(size = 20), axis.title = element_text(size = 20), 
+             plot.title = element_text(size = 25, face = "bold"))
+
+print(p2.He)
+```
+
+## Ho ~ PC1
+### linear model (landscape)
+```{r}
+ho.lands.fit <- lm(Ho ~ pc1_lands, data = div.df)
+summary(ho.lands.fit)
+```
+
+-   Diagnostics
+```{r}
+plot(ho.lands.fit)
+```
+
+- normality & homoscendasticity
+```{r}
+# shapiro-wilk
+residuals(ho.lands.fit) %>% shapiro.test()
+
+# Bartlett
+ncvTest(ho.lands.fit)
+
+# Cook's distance
+cooks.distance(ho.lands.fit) %>% plot()
+which(cooks.distance(ho.lands.fit) > 4/length(div.df$pop))  # 找出 Cook's Distance 較大的觀測值
+```
+
+### EXPORT-- plot (landscape)
+```{r}
+p3.Ho <- 
+ggplot(div.df, aes(x = pc1_lands , y = Ho)) + geom_point(size = 5) + 
+       geom_smooth(method = "lm", formula = y ~ x, color = "cornflowerblue", se = TRUE) + 
+       #annotate("text", x = 2, y = 0.13, label = "p = 0.001", hjust = 0, size = 8) +
+       #annotate("text", x = 2, y = 0.13, label = "italic(R[adj])^2 == 0.48",
+       #         parse = TRUE, hjust = 0, vjust = 1.5, size = 8) +
+       theme_classic() +
+       xlab("PC1") + ylab(expression(Observed~heterozygosity~(H[O]))) + ggtitle("(c)") +
+       theme(axis.text = element_text(size = 20), axis.title = element_text(size = 20),
+             plot.title = element_text(size = 25, face = "bold"))
+p3.Ho
+```
+
+### linear model (local)
+```{r}
+ho.local.fit <- lm(Ho ~ pc1_local, data = div.df)
+summary(ho.local.fit)
+```
+
+-   Diagnostics
+```{r}
+plot(ho.local.fit)
+```
+
+- normality & homoscendasticity
+```{r}
+# shapiro-wilk
+residuals(ho.local.fit) %>% shapiro.test()
+
+# Bartlett
+ncvTest(ho.local.fit)
+
+# Cook's distance
+cooks.distance(ho.local.fit) %>% plot()
+which(cooks.distance(ho.local.fit) > 4/length(div.df$pop))
+```
+
+### EXPORT-- plot (local)
+```{r}
+p4.Ho <- 
+ggplot(div.df, aes(x = pc1_local , y = Ho)) + geom_point(size = 5) + 
+       geom_smooth(method = "lm", formula = y ~ x, color = "cornflowerblue", se = TRUE) + 
+       #annotate("text", x = 1.5, y = 0.115, label = "p = 0.04", hjust = 0, size = 8) +
+       #annotate("text", x = 1.5, y = 0.115, label = "italic(R[adj])^2 == 0.20",
+       #         parse = TRUE, hjust = 0, vjust = 1.5, size = 8) +
+       theme_classic() +
+       xlab("PC1") + ylab(expression(Observed~heterozygosity~(H[O]))) + ggtitle("(D)") +
+       theme(axis.text = element_text(size = 20), axis.title = element_text(size = 20),
+             plot.title = element_text(size = 25, face = "bold"))
+p4.Ho
+```
+
+## Ar ~ PC1
+### linear model (landscape)
+```{r}
+ar.lands.fit <- lm(Ar ~ pc1_lands, data = div.df)
+summary(ar.lands.fit)
+```
+
+-   Diagnostics
+```{r}
+plot(ar.lands.fit)
+```
+
+- normality & homoscendasticity
+```{r}
+# shapiro-wilk
+residuals(ar.lands.fit) %>% shapiro.test()
+
+# Bartlett
+ncvTest(ar.lands.fit)
+
+# Cook's distance
+cooks.distance(ar.lands.fit) %>% plot()
+which(cooks.distance(ar.lands.fit) > 4/length(div.df$pop))
+```
+
+### EXPORT-- plot (landscape)
+```{r}
+p5.Ar <- 
+ggplot(div.df, aes(x = pc1_lands , y = Ar)) + geom_point(size = 5) + 
+       geom_smooth(method = "lm", formula = y ~ x, color = "cornflowerblue", se = TRUE) + 
+       #annotate("text", x = 2, y = 1.13, label = "p = 0.005", hjust = 0, size = 8) +
+       #annotate("text", x = 2, y = 1.13, label = "italic(R[adj])^2 == 0.39",
+       #         parse = TRUE, hjust = 0, vjust = 1.5, size = 8) +
+       theme_classic() +
+       xlab("PC1") + ylab(expression(Allelic~richness~(Ar))) + ggtitle("(E)") +
+       theme(axis.text = element_text(size = 20), axis.title = element_text(size = 20),
+             plot.title = element_text(size = 25, face = "bold"))
+
+print(p5.Ar)
+```
+
+### linear model (local)
+```{r}
+ar.local.fit <- lm(Ar ~ pc1_local, data = div.df)
+summary(ar.local.fit)
+```
+
+-   Diagnostics
+```{r}
+plot(ar.local.fit)
+```
+
+- normality & homoscendasticity
+```{r}
+# shapiro-wilk
+residuals(ar.local.fit) %>% shapiro.test()
+
+# Bartlett
+ncvTest(ar.local.fit)
+
+# Cook's distance
+cooks.distance(ar.local.fit) %>% plot()
+which(cooks.distance(ar.local.fit) > 4/length(div.df$pop))
+```
+
+### EXPORT-- plot (local)
+```{r}
+p6.Ar <- 
+ggplot(div.df, aes(x = pc1_local, y = Ar)) + geom_point(size = 5) + 
+       geom_smooth(method = "lm", formula = y ~ x, color = "cornflowerblue", se = TRUE) + 
+       #annotate("text", x = 1.6, y = 1.125, label = "p = 0.09", hjust = 0, size = 8) +
+       #annotate("text", x = 1.6, y = 1.125, label = "italic(R[adj])^2 == 0.12",
+       #         parse = TRUE, hjust = 0, vjust = 1.5, size = 8) +
+       theme_classic() +
+       xlab("PC1") + ylab(expression(Allelic~richness~(Ar))) + ggtitle("(F)") +
+       theme(axis.text = element_text(size = 20), axis.title = element_text(size = 20),
+             plot.title = element_text(size = 25, face = "bold"))
+
+print(p6.Ar)
+```
+
+## EXPORT -- He, Ho, Ar
+```{r}
+fig4 <- grid.arrange(p1.He, p2.He, p3.Ho, p4.Ho, p5.Ar, p6.Ar, ncol = 2)
+```
+
+- tif
+```{r eval=FALSE}
+ggsave(filename = "Figure4.tif", plot = fig4, width = 18, height = 18, units = "in", dpi = 150)
+```
+
+----------------------------------------------------------------------------------------------------
+# Diversity & Land use
+## import landuse data
+```{r}
+landuse.lands <- read_excel("../Data/Landuse1000_perc.xlsx", sheet = 1)
+landuse.local <- read_excel("../Data/Landuse250_perc.xlsx", sheet = 1)
+```
+
+- combine land use & diversity data
+
+```{r}
+landuse.lands <- landuse.lands %>% merge(div.df[ ,c(1,7:9)], by = "pop")
+landuse.local <- landuse.local %>% merge(div.df[ ,c(1,7:9)], by = "pop")
+landuse.lands; landuse.local
+```
+## Excepted Heterozygosity (landscape)
+### model selection
+- full model
+```{r}
+he.lands.full <- lm(He ~ Agriculture + Forest + Travel + Water +
+                    Build + Park + Grass + Other, data = landuse.lands)
+summary(he.lands.full)
+```
+
+```{r}
+options(na.action = "na.fail")
+dredge(he.lands.full) %>% subset(delta < 1)
+```
+
+-   Best model
+
+```{r}
+dredge(he.lands.full) %>% get.models(1) %>% .[[1]] %>% summary()
+```
+
+## Excepted Heterozygosity (local)
+### model selection
+- full model
+```{r}
+he.local.full <- lm(He ~ Agriculture + Forest + Travel + Water +
+                    Build + Park + Grass + Other, data = landuse.local)
+summary(he.local.full)
+```
+
+```{r}
+options(na.action = "na.fail")
+dredge(he.local.full) %>% subset(delta < 1)
+```
+
+-   Best model
+```{r}
+dredge(he.local.full) %>% get.models(1) %>% .[[1]] %>% summary()
+```
+
+## Observed Heterozygosity (landscape)
+### model selection
+- full model
+```{r}
+ho.lands.full <- lm(Ho ~ Agriculture + Forest + Travel + Water +
+                    Build + Park + Grass + Other, data = landuse.lands)
+summary(ho.lands.full)
+```
+
+```{r}
+options(na.action = "na.fail")
+dredge(ho.lands.full) %>% subset(delta < 1)
+```
+
+-   Best model
+```{r}
+dredge(ho.lands.full) %>% get.models(1) %>% .[[1]] %>% summary()
+```
+
+## Observed Heterozygosity (local)
+### model selection
+- full model
+```{r}
+ho.local.full <- lm(Ho ~ Agriculture + Forest + Travel + Water +
+                    Build + Park + Grass + Other, data = landuse.local)
+summary(ho.local.full)
+```
+
+```{r}
+options(na.action = "na.fail")
+dredge(ho.local.full) %>% subset(delta < 1)
+```
+
+-   Best model
+```{r}
+dredge(ho.local.full) %>% get.models(1) %>% .[[1]] %>% summary()
+```
+
+## Allelic richness (landscape)
+### model selection
+- full model
+```{r}
+ar.lands.full <- lm(Ar ~ Agriculture + Forest + Travel + Water +
+                    Build + Park + Grass + Other, data = landuse.lands)
+summary(ar.lands.full)
+```
+
+```{r}
+options(na.action = "na.fail")
+dredge(ar.lands.full) %>% subset(delta < 1)
+```
+
+-   Best model
+```{r}
+dredge(ar.lands.full) %>% get.models(1) %>% .[[1]] %>% summary()
+```
+
+## Allelic richness (local)
+### model selection
+- full model
+```{r}
+Ar.local.full <- lm(Ar ~ Agriculture + Forest + Travel + Water +
+                    Build + Park + Grass + Other, data = landuse.local)
+summary(Ar.local.full)
+```
+
+```{r}
+options(na.action = "na.fail")
+dredge(Ar.local.full) %>% subset(delta < 1)
+```
+
+-   Best model
+```{r}
+dredge(Ar.local.full) %>% get.models(1) %>% .[[1]] %>% summary()
+```
+
+
+----------------------------------------------------------------------------------------------------
+# Genetic differentiation (FST)
+```{r eval=FALSE}
+pfst <- Fst(inputFile = "../Data/snp.gen.txt", outputFile = "", pairs = TRUE)
+```
+
+```{r eval=FALSE}
+pfst %>% reorder_mat(order = levels(factor(pop))) %>% 
+  as.data.frame() %>% write.csv(file = "Pairwise Fst.csv")
+```
+
+- read file
+```{r}
+fst.mat <- read.csv("../Data/Pairwise Fst.csv", row.names = 1, check.names = FALSE)
+fst.mat
+```
+
+## convert Fst matrix to three columns
+```{r}
+upper_tri <- upper.tri(fst.mat, diag = FALSE)
+
+fst.df <- data.frame(pop1 = rownames(fst.mat)[row(fst.mat)[upper_tri]],
+                     pop2 = colnames(fst.mat)[col(fst.mat)[upper_tri]],
+                     Fst  = fst.mat[upper_tri],row.names = NULL)
+
+fst.df
+```
+
+
+-   urbanization region
+```{r}
+fst.df <- fst.df %>% mutate(region1 = case_when(
+                            pop1 %in% c('FLP','NMNS','THU','DFP','DHP','ZGZ') ~ "Urban",
+                            pop1 %in% c('BTP','XLC','DKP','DTZ','PLS','DK7-8') ~ "Suburban",
+                            pop1 %in% c('WFC','JJF','CLS','DK1-4','BK') ~ "Nonurban")) %>% 
+
+                     mutate(region2 = case_when(
+                            pop2 %in% c('FLP','NMNS','THU','DFP','DHP','ZGZ') ~ "Urban",
+                            pop2 %in% c('BTP','XLC','DKP','DTZ','PLS','DK7-8') ~ "Suburban",
+                            pop2 %in% c('WFC','JJF','CLS','DK1-4','BK') ~ "Nonurban"))
+
+head(fst.df)
+```
+
+```{r}
+fst.df$pair <- paste(fst.df$region1, fst.df$region2, sep = "–")
+levels(as.factor(fst.df$pair))
+```
+
+-   some pairs are identical
+```{r}
+fst.df$pair <- ifelse(fst.df$pair == "Nonurban–Urban", "Urban–Nonurban",
+                      ifelse(fst.df$pair == "Nonurban–Suburban", "Suburban–Nonurban",
+                             ifelse(fst.df$pair == "Suburban–Urban", "Urban–Suburban", fst.df$pair)))
+```
+
+-   reorder pairs
+```{r}
+fst.df$pair <- factor(fst.df$pair, levels = c("Urban–Urban","Suburban–Suburban","Nonurban–Nonurban",
+                                              "Urban–Suburban","Urban–Nonurban","Suburban–Nonurban"))
+levels(as.factor(fst.df$pair))    # check levels
+```
+
+## statistics
+```{r}
+# kruskal test
+fst.df[fst.df$pair %in% c("Urban–Urban","Suburban–Suburban","Nonurban–Nonurban"),] %>% 
+   kruskal.test(Fst ~ pair, data = .)
+```
+
+-   Dunn's test
+```{r}
+fst.df[fst.df$pair %in% c("Urban–Urban","Suburban–Suburban","Nonurban–Nonurban"),] %>% 
+  dunn_test(Fst ~ pair, p.adjust.method = "bonferroni")
+```
+
+## summarize
+```{r}
+fst.sum <- Summarize(Fst ~ pair, data = fst.df)
+fst.sum
+```
+
+## EXPORT (dot plot)
+```{r}
+fst.plot <- fst.sum[c(1:3),] %>% mutate(pair = c("Urban", "Suburban", "Non-urban"))
+fst.plot$pair <- factor(fst.plot$pair, levels = c("Urban", "Suburban", "Non-urban"))
+fst.plot
+```
+
+- dot plot
+```{r}
+p.fst <- 
+ggplot(data = fst.plot) + 
+       geom_pointrange(aes(x = pair, y = mean, ymin = mean-sd/sqrt(n), ymax = mean+sd/sqrt(n),
+                           color = pair), size = 1.5) +
+       scale_color_manual(values = c("hotpink2","cornflowerblue","mediumseagreen")) +
+       labs(x = "", color = "Pair") +  ylab(expression(Pairwise~~F[ST])) +
+       theme_classic() +
+       theme(axis.title = element_text(size = 15), axis.text.x = element_text(size = 15),
+             plot.title = element_text(size = 20, face = "bold")) + 
+       theme(legend.position = "none") +
+       scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
+       annotate("segment", x = 1, xend = 3, y = 0.175, yend = 0.175) +
+       annotate("text", x = 2, y = 0.165, label = "****", size = 10) +
+       annotate("segment", x = 2, xend = 3, y = 0.15, yend = 0.15) +
+       annotate("text", x = 2.5, y = 0.14, label = "**", size = 10) +
+       ggtitle("(B)")
+p.fst
+```
+
+
+
