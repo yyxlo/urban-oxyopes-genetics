@@ -365,8 +365,18 @@ ggsave(filename = "Figure4.tif", plot = fig4, width = 18, height = 18, units = "
 # Diversity & Land use
 ## import landuse data
 ```{r}
-landuse.lands <- read_excel("../Data/Landuse1000_perc.xlsx", sheet = 1)
-landuse.local <- read_excel("../Data/Landuse250_perc.xlsx", sheet = 1)
+landuse.lands <- read.csv("../Data/Landuse1000.csv")
+landuse.local <- read.csv("../Data/Landuse250.csv")
+```
+
+- convert m^2 to km^2
+```{r}
+landuse.lands <- landuse.lands %>% mutate(across(2:9, ~ .x / 1000000))
+landuse.local <- landuse.local %>% mutate(across(2:9, ~ .x / 1000000))
+
+# check area
+landuse.lands[ ,2:9] %>% rowSums()
+landuse.local[ ,2:9] %>% rowSums()
 ```
 
 - combine land use & diversity data
